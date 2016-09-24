@@ -1,0 +1,6 @@
+[package]
+name = "irc-envoy"
+version = "0.1.0"
+authors = ["Jose A. Garcia <argantonio@gmail.com>"]
+
+[dependencies]
