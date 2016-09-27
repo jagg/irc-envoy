@@ -69,6 +69,7 @@ impl Irc {
         reader.receive_and_print();
         thread::sleep(time::Duration::from_millis(2000));
         sender.join("irc-test");
+
         Ok(Irc {
             receiver: reader,
             sender: sender,
