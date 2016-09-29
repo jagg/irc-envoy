@@ -1,4 +1,5 @@
 use std::str;
+use nom::IResult;
 
 #[derive(Eq,Debug,PartialEq)]
 pub struct Channel(String);
@@ -24,21 +25,19 @@ pub enum Msg {
         destination: Channel,
         msg: String,
     },
-
+    Other(String),
     Ping(Server, String),
 }
 
 pub fn parse(input: &[u8]) -> Msg {
-    let (rest, r) = chan_content(input).unwrap();
-    println!("{}", str::from_utf8(rest).unwrap());
-    r
+    let result = irc_parser(input);
+    match result {
+        IResult::Done(_, parsed) => parsed,
+        _ => Msg::Other(str::from_utf8(input).unwrap().to_string()),
+    }
 }
-// Examples
-// [74] CONNECTED: :jagg!uid183337@moz-ht3idd.brockwell.irccloud.com PRIVMSG #irc-test :hi!
-// [99] CONNECTED: :jagg!uid183337@moz-ht3idd.brockwell.irccloud.com PRIVMSG #irc-test :irc-envoy-test: did it work?
-//                 :Angel!wings@irc.org PRIVMSG Wiz :Are you receiving this message ?
 
-// :{nick-sender}!{host} PRIVMSG {opt: nick-receiver / #channel} :{message}
+named!(irc_parser< &[u8], Msg >, alt!(chan_content | priv_content));
 
 named!(user_name<&[u8], &str>,
     map_res!(
@@ -58,6 +57,17 @@ named!(channel_name<&[u8], &str>,
     )
 );
 
+named!(destination_user<&[u8], &str>,
+    map_res!(
+        chain!(
+           char!(' ')               ~
+           user: take_until!(" ")   ~
+           char!(' ')               ,
+           || {user} ),
+        str::from_utf8
+    )
+);
+
 named!(message<&[u8], &str>,
     map_res!(
         chain!(
@@ -73,9 +83,22 @@ named!(chan_content<&[u8], Msg>,
         take_until_and_consume!(" ")    ~
         tag!("PRIVMSG ")                ~
         channel: channel_name           ~
-        tag!(":")                        ~
+        char!(':')                       ~
         msg: message,
      ||{Msg::ChanContent { origin: User(nick.to_string()), destination: Channel(channel.to_string()), msg: msg.to_string()} }
+    )
+);
+
+
+named!(priv_content<&[u8], Msg>,
+    chain!(
+        nick: user_name                 ~
+        take_until_and_consume!(" ")    ~
+        tag!("PRIVMSG")                 ~
+        destination: destination_user   ~
+        char!(':')                      ~
+        msg: message,
+        ||{Msg::PrivContent { origin: User(nick.to_string()), destination: User(destination.to_string()), msg: msg.to_string()} }
     )
 );
 
@@ -92,4 +115,18 @@ mod tests {
         };
         assert_eq!(msg, parse(b":jagg!uid183337@moz-ht3idd.brockwell.irccloud.com PRIVMSG #irc-test :hi!\r\n"));
     }
+
+    #[test]
+    fn test_priv_message() {
+        let msg = Msg::PrivContent {
+            origin: User("Angel".to_string()),
+            destination: User("Wiz".to_string()),
+            msg: "Are you receiving this message ?".to_string(),
+        };
+        let parsed_cnt =
+            parse(b":Angel!wings@irc.org PRIVMSG Wiz :Are you receiving this message ?\r\n");
+        assert_eq!(msg, parsed_cnt);
+    }
+
+
 }
