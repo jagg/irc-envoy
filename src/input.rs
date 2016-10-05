@@ -1,14 +1,33 @@
 use std::str;
 use nom::IResult;
+use std::fmt;
 
 #[derive(Eq,Debug,PartialEq)]
 pub struct Channel(String);
 
+impl fmt::Display for Channel {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(Eq,Debug,PartialEq)]
 pub struct User(String);
 
+impl fmt::Display for User {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(Eq,Debug,PartialEq)]
 pub struct Server(String);
+
+impl fmt::Display for Server {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 
 #[derive(Eq,Debug,PartialEq)]
@@ -28,6 +47,7 @@ pub enum Msg {
     Other(String),
     Ping(Server, String),
 }
+
 
 pub fn parse(input: &[u8]) -> Msg {
     let result = irc_parser(input);

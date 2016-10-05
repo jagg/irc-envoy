@@ -6,16 +6,20 @@ use std::io::prelude::{Write, Read};
 use std::thread;
 use std::time;
 
+use super::input;
+
 pub struct Config {
     pub server: String,
     pub port: u16,
 }
 
-pub struct IrcReceiver {
+pub struct IrcBackground {
     tcp_stream: net::TcpStream,
+    tcp_writer: BufWriter<net::TcpStream>,
 }
 
-impl IrcReceiver {
+
+impl IrcBackground {
     pub fn receive_and_print(&mut self) -> thread::JoinHandle<()> {
         let stream = self.tcp_stream.try_clone().unwrap();
         let mut stream = BufReader::new(stream);
@@ -23,13 +27,26 @@ impl IrcReceiver {
             loop {
                 let mut buffer = String::new();
                 let num_bytes = stream.read_line(&mut buffer).unwrap();
-                println!("[{:?}] CONNECTED: {}", num_bytes, buffer);
+                let msg = input::parse(buffer.as_bytes());
+                simple_print(msg);
             }
         })
 
     }
 }
 
+fn simple_print(msg: input::Msg) {
+    match msg {
+        input::Msg::PrivContent { origin: o, destination: d, msg } => {
+            println!("[{} -> {}] {}", o, d, msg)
+        }
+        input::Msg::ChanContent { origin: o, destination: d, msg } => {
+            println!("[{} -> #{}] {}", o, d, msg)
+        }
+        input::Msg::Other(msg) => println!("... {}", msg),
+        _ => println!("This should't happen!"),
+    }
+}
 
 pub struct IrcSender {
     tcp_stream: BufWriter<net::TcpStream>,
@@ -50,16 +67,21 @@ impl IrcSender {
 }
 
 pub struct Irc {
-    receiver: IrcReceiver,
+    receiver: IrcBackground,
     sender: IrcSender,
 }
 
 
-fn new(con: Config) -> io::Result<(IrcReceiver, IrcSender)> {
+fn new(con: Config) -> io::Result<(IrcBackground, IrcSender)> {
     let stream = try!(net::TcpStream::connect((con.server.as_str(), con.port)));
     let reader = stream.try_clone().unwrap();
     let buf_writer = BufWriter::new(stream.try_clone().unwrap());
-    Ok((IrcReceiver { tcp_stream: reader }, IrcSender { tcp_stream: buf_writer }))
+    let back_writer = BufWriter::new(stream.try_clone().unwrap());
+    Ok((IrcBackground {
+        tcp_stream: reader,
+        tcp_writer: back_writer,
+    },
+        IrcSender { tcp_stream: buf_writer }))
 }
 
 impl Irc {
