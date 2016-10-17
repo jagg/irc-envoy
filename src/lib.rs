@@ -3,5 +3,7 @@
 extern crate nom;
 
 pub mod irc;
-pub mod parser;
 pub mod display;
+pub mod data;
+
+mod parser;

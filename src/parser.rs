@@ -1,63 +1,17 @@
 use std::str;
 use nom::IResult;
-use std::fmt;
 
-#[derive(Eq,Debug,PartialEq)]
-pub struct Channel(String);
+use super::data;
 
-impl fmt::Display for Channel {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-#[derive(Eq,Debug,PartialEq)]
-pub struct User(String);
-
-impl fmt::Display for User {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-#[derive(Eq,Debug,PartialEq)]
-pub struct Server(String);
-
-impl fmt::Display for Server {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-
-#[derive(Eq,Debug,PartialEq)]
-pub enum Msg {
-    Join(Channel),
-    Part(Channel),
-    PrivContent {
-        origin: User,
-        destination: User,
-        msg: String,
-    },
-    ChanContent {
-        origin: User,
-        destination: Channel,
-        msg: String,
-    },
-    Other(String),
-    Ping(Server, String),
-}
-
-
-pub fn parse(input: &[u8]) -> Msg {
+pub fn parse(input: &[u8]) -> data::Msg {
     let result = irc_parser(input);
     match result {
         IResult::Done(_, parsed) => parsed,
-        _ => Msg::Other(str::from_utf8(input).unwrap().to_string()),
+        _ => data::Msg::Other(str::from_utf8(input).unwrap().to_string()),
     }
 }
 
-named!(irc_parser< &[u8], Msg >, alt!(chan_content | priv_content));
+named!(irc_parser< &[u8], data::Msg >, alt!(chan_content | priv_content));
 
 named!(user_name<&[u8], &str>,
     map_res!(
@@ -97,20 +51,20 @@ named!(message<&[u8], &str>,
     )
 );
 
-named!(chan_content<&[u8], Msg>,
+named!(chan_content<&[u8], data::Msg>,
     chain!(
         nick: user_name                 ~
         take_until_and_consume!(" ")    ~
         tag!("PRIVMSG ")                ~
         channel: channel_name           ~
-        char!(':')                       ~
+        char!(':')                      ~
         msg: message,
-     ||{Msg::ChanContent { origin: User(nick.to_string()), destination: Channel(channel.to_string()), msg: msg.to_string()} }
+     ||{data::Msg::ChanContent { origin: data::User::from(nick), destination: data::Channel::from(channel), msg: msg.to_string()} }
     )
 );
 
 
-named!(priv_content<&[u8], Msg>,
+named!(priv_content<&[u8], data::Msg>,
     chain!(
         nick: user_name                 ~
         take_until_and_consume!(" ")    ~
@@ -118,19 +72,20 @@ named!(priv_content<&[u8], Msg>,
         destination: destination_user   ~
         char!(':')                      ~
         msg: message,
-        ||{Msg::PrivContent { origin: User(nick.to_string()), destination: User(destination.to_string()), msg: msg.to_string()} }
+        ||{data::Msg::PrivContent { origin: data::User::from(nick), destination: data::User::from(destination), msg: msg.to_string()} }
     )
 );
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::data;
 
     #[test]
     fn test_channel_message() {
-        let msg = Msg::ChanContent {
-            origin: User("jagg".to_string()),
-            destination: Channel("irc-test".to_string()),
+        let msg = data::Msg::ChanContent {
+            origin: data::User::from("jagg"),
+            destination: data::Channel::from("irc-test"),
             msg: "hi!".to_string(),
         };
         assert_eq!(msg, parse(b":jagg!uid183337@moz-ht3idd.brockwell.irccloud.com PRIVMSG #irc-test :hi!\r\n"));
@@ -138,9 +93,9 @@ mod tests {
 
     #[test]
     fn test_priv_message() {
-        let msg = Msg::PrivContent {
-            origin: User("Angel".to_string()),
-            destination: User("Wiz".to_string()),
+        let msg = data::Msg::PrivContent {
+            origin: data::User::from("Angel"),
+            destination: data::User::from("Wiz"),
             msg: "Are you receiving this message ?".to_string(),
         };
         let parsed_cnt =
